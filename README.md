@@ -105,3 +105,5 @@ The core game logic written in JavaScript. Handles movement, collision detection
 zombie-game.css
 
 Stylesheet that provides the dark, horror-themed visual design and responsive layout for the game interface.
+http://localhost:3000/zombie-game click on this link to go through the game
+
