@@ -1,0 +1,1273 @@
+document.addEventListener('DOMContentLoaded', function() {
+    // Game elements
+    const canvas = document.getElementById('game-canvas');
+    const ctx = canvas.getContext('2d');
+    const healthDisplay = document.getElementById('health');
+    const scoreDisplay = document.getElementById('score');
+    const zombiesKilledDisplay = document.getElementById('zombies-killed');
+    const specialChargeDisplay = document.getElementById('special-charge');
+    const currentHeroDisplay = document.getElementById('current-hero');
+    const specialMoveDisplay = document.getElementById('special-move');
+    const finalScoreDisplay = document.getElementById('final-score');
+    const gameOverScreen = document.getElementById('game-over');
+    const startScreen = document.getElementById('start-screen');
+    const storyModeScreen = document.getElementById('story-mode');
+    const specialNotification = document.getElementById('special-move-notification');
+    const readySpecialMoveDisplay = document.getElementById('ready-special-move');
+    const startBtn = document.getElementById('start-btn');
+    const storyModeBtn = document.getElementById('story-mode-btn');
+    const startStoryBtn = document.getElementById('start-story-btn');
+    const restartBtn = document.getElementById('restart-btn');
+    
+    // Weapon buttons
+    const swordBtn = document.getElementById('sword-btn');
+    const fireBtn = document.getElementById('fire-btn');
+    const iceBtn = document.getElementById('ice-btn');
+    const lightningBtn = document.getElementById('lightning-btn');
+    const earthBtn = document.getElementById('earth-btn');
+    
+    // Character buttons
+    const veronicaBtn = document.getElementById('veronica-btn');
+    const kaneBtn = document.getElementById('kane-btn');
+    const lyraBtn = document.getElementById('lyra-btn');
+    const rexBtn = document.getElementById('rex-btn');
+    
+    // Game settings
+    const GRAVITY = 0.5;
+    const JUMP_FORCE = -12;
+    const MOVE_SPEED = 5;
+    const DASH_SPEED = 15;
+    const DASH_DURATION = 10;
+    const DASH_COOLDOWN = 60;
+    
+    // Heroes data with unique weapons, enemies, and backgrounds
+    const heroes = {
+        veronica: {
+            name: "Veronica",
+            species: "Human",
+            specialMove: "Galaxy Slash",
+            color: "#4444ff",
+            specialEffect: "galaxy",
+            enemies: "zombies",
+            background: {
+                top: '#8b0000',
+                bottom: '#4b0000'
+            },
+            weapons: {
+                melee: { name: "Plasma Blade", damage: 30, range: 70 },
+                magic: { name: "Stellar Blast", damage: 40, color: "#4444ff" }
+            }
+        },
+        kane: {
+            name: "Kane",
+            species: "Elf",
+            specialMove: "King's Hand",
+            color: "#ff4444",
+            specialEffect: "king",
+            enemies: "witches",
+            background: {
+                top: '#2c003e',
+                bottom: '#1a0024'
+            },
+            weapons: {
+                melee: { name: "Moonlight Edge", damage: 35, range: 75 },
+                magic: { name: "Arcane Missiles", damage: 45, color: "#ff44ff" }
+            }
+        },
+        lyra: {
+            name: "Lyra",
+            species: "Feline",
+            specialMove: "Shadow Veil",
+            color: "#8844ff",
+            specialEffect: "shadow",
+            enemies: "turtles",
+            background: {
+                top: '#004d00',
+                bottom: '#002e00'
+            },
+            weapons: {
+                melee: { name: "Claw Gauntlets", damage: 25, range: 60 },
+                magic: { name: "Venom Strike", damage: 35, color: "#00cc66" }
+            }
+        },
+        rex: {
+            name: "Rex",
+            species: "Beastkin",
+            specialMove: "Thunder Storm",
+            color: "#ffff44",
+            specialEffect: "thunder",
+            enemies: "pigs",
+            background: {
+                top: '#4d3300',
+                bottom: '#2e1f00'
+            },
+            weapons: {
+                melee: { name: "Bone Crusher", damage: 40, range: 80 },
+                magic: { name: "Magma Burst", damage: 50, color: "#ff6600" }
+            }
+        }
+    };
+    
+    // Enemy types
+    const enemyTypes = {
+        zombies: {
+            name: "Zombie",
+            normal: { health: 50, speed: 2, color: "#003300" },
+            boss: { health: 150, speed: 1.5, color: "#002200", size: 1.5 }
+        },
+        witches: {
+            name: "Witch",
+            normal: { health: 40, speed: 3, color: "#330033" },
+            boss: { health: 120, speed: 2.5, color: "#220022", size: 1.4 }
+        },
+        turtles: {
+            name: "Turtle",
+            normal: { health: 70, speed: 4, color: "#003311" },
+            boss: { health: 200, speed: 3, color: "#002200", size: 1.6 }
+        },
+        pigs: {
+            name: "Pig",
+            normal: { health: 60, speed: 3.5, color: "#663300" },
+            boss: { health: 180, speed: 2.8, color: "#442200", size: 1.5 }
+        }
+    };
+    
+    // Game state
+    let gameRunning = false;
+    let gameLoop;
+    let keys = {};
+    let mouseX = 0;
+    let mouseY = 0;
+    
+    // Player object
+    const player = {
+        x: 100,
+        y: 300,
+        width: 40,
+        height: 60,
+        velocityX: 0,
+        velocityY: 0,
+        onGround: false,
+        health: 100,
+        score: 0,
+        zombiesKilled: 0,
+        isDashing: false,
+        dashCooldown: 0,
+        currentWeapon: 'melee',
+        facingRight: true,
+        attackCooldown: 0,
+        currentHero: 'veronica',
+        specialCharge: 0,
+        specialActive: false,
+        specialTimer: 0
+    };
+    
+    // Weapons
+    const weapons = {
+        melee: { damage: 25, cooldown: 10, range: 60 },
+        magic: { damage: 35, cooldown: 30, color: '#4488ff' }
+    };
+    
+    // Game objects
+    let enemies = [];
+    let projectiles = [];
+    let particles = [];
+    let specialEffects = [];
+    let medikits = []; // New array for medikits
+    let medikitRespawnTimers = []; // Track respawn timers for medikits
+    let platforms = [
+        { x: 0, y: 380, width: 800, height: 20 }, // Ground
+        { x: 200, y: 300, width: 100, height: 20 },
+        { x: 400, y: 250, width: 100, height: 20 },
+        { x: 600, y: 300, width: 100, height: 20 }
+    ];
+    
+    // Initialize game
+    function initGame() {
+        player.x = 100;
+        player.y = 300;
+        player.velocityX = 0;
+        player.velocityY = 0;
+        player.health = 100;
+        player.score = 0;
+        player.zombiesKilled = 0;
+        player.isDashing = false;
+        player.dashCooldown = 0;
+        player.currentWeapon = 'melee';
+        player.attackCooldown = 0;
+        player.currentHero = 'veronica';
+        player.specialCharge = 0;
+        player.specialActive = false;
+        player.specialTimer = 0;
+        
+        enemies = [];
+        projectiles = [];
+        particles = [];
+        specialEffects = [];
+        medikits = []; // Initialize medikits array
+        medikitRespawnTimers = []; // Initialize respawn timers
+        
+        updateUI();
+        gameOverScreen.classList.add('hidden');
+        specialNotification.classList.add('hidden');
+        storyModeScreen.classList.add('hidden'); // Hide story mode screen
+        
+        // Update hero display
+        currentHeroDisplay.textContent = heroes[player.currentHero].name;
+        specialMoveDisplay.textContent = heroes[player.currentHero].specialMove;
+        readySpecialMoveDisplay.textContent = heroes[player.currentHero].specialMove;
+        
+        // Create initial medikits above platforms
+        createMedikit(250, 280); // Above first platform
+        createMedikit(450, 230); // Above second platform
+        createMedikit(650, 280); // Above third platform
+    }
+    
+    // Update UI elements
+    function updateUI() {
+        healthDisplay.textContent = player.health;
+        scoreDisplay.textContent = player.score;
+        zombiesKilledDisplay.textContent = player.zombiesKilled;
+        specialChargeDisplay.textContent = player.specialCharge;
+        currentHeroDisplay.textContent = heroes[player.currentHero].name;
+        specialMoveDisplay.textContent = heroes[player.currentHero].specialMove;
+    }
+    
+    // Create enemy based on current hero
+    function createEnemy() {
+        const side = Math.random() > 0.5 ? 1 : -1;
+        const hero = heroes[player.currentHero];
+        const enemyType = enemyTypes[hero.enemies];
+        
+        // Check if it's time for a boss (every 20 kills)
+        const isBoss = player.zombiesKilled > 0 && player.zombiesKilled % 20 === 0;
+        
+        enemies.push({
+            x: side > 0 ? -50 : canvas.width + 50,
+            y: 320,
+            width: isBoss ? 35 * (enemyType.boss.size || 1.5) : 35,
+            height: isBoss ? 60 * (enemyType.boss.size || 1.5) : 60,
+            velocityX: (Math.random() * enemyType.normal.speed + 1) * side * -1,
+            health: isBoss ? enemyType.boss.health : enemyType.normal.health,
+            maxHealth: isBoss ? enemyType.boss.health : enemyType.normal.health,
+            attackCooldown: 0,
+            type: isBoss ? "boss" : "normal",
+            color: isBoss ? enemyType.boss.color : enemyType.normal.color,
+            speed: isBoss ? enemyType.boss.speed : enemyType.normal.speed,
+            eyePopOffset: Math.random() * 10 - 5 // For eye popping effect
+        });
+    }
+    
+    // Create particle effect
+    function createParticles(x, y, color, count) {
+        for (let i = 0; i < count; i++) {
+            particles.push({
+                x: x,
+                y: y,
+                velocityX: (Math.random() - 0.5) * 10,
+                velocityY: (Math.random() - 0.5) * 10,
+                life: 30,
+                color: color
+            });
+        }
+    }
+    
+    // Create special effect
+    function createSpecialEffect(type, x, y) {
+        specialEffects.push({
+            type: type,
+            x: x,
+            y: y,
+            timer: 60,
+            size: 0
+        });
+    }
+    
+    // Create medikit
+    function createMedikit(x, y) {
+        medikits.push({
+            x: x,
+            y: y,
+            width: 20,
+            height: 20,
+            healAmount: 25,
+            id: Date.now() // Unique ID for tracking
+        });
+    }
+    
+    // Player attack
+    function playerAttack() {
+        if (player.attackCooldown > 0) return;
+        
+        const hero = heroes[player.currentHero];
+        const weapon = player.currentWeapon === 'melee' ? hero.weapons.melee : hero.weapons.magic;
+        
+        if (weapon.cooldown > 0) return;
+        
+        player.attackCooldown = 15; // Attack animation cooldown
+        
+        // Melee attack
+        if (player.currentWeapon === 'melee') {
+            // Simple melee attack in front of player
+            const attackX = player.facingRight ? player.x + player.width : player.x - weapon.range;
+            const attackY = player.y;
+            
+            // Check for enemy hits
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const enemy = enemies[i];
+                if (attackX < enemy.x + enemy.width &&
+                    attackX + weapon.range > enemy.x &&
+                    attackY < enemy.y + enemy.height &&
+                    attackY + 30 > enemy.y) {
+                    
+                    enemy.health -= weapon.damage;
+                    createParticles(enemy.x + enemy.width/2, enemy.y + enemy.height/2, hero.color, 10);
+                    
+                    if (enemy.health <= 0) {
+                        enemies.splice(i, 1);
+                        player.score += enemy.type === "boss" ? 300 : 100; // Boss gives more points
+                        player.zombiesKilled++;
+                        player.specialCharge = Math.min(player.specialCharge + 1, 10);
+                        
+                        // Check if special move is ready
+                        if (player.specialCharge >= 10) {
+                            readySpecialMoveDisplay.textContent = hero.specialMove;
+                            specialNotification.classList.remove('hidden');
+                        }
+                    }
+                }
+            }
+        } 
+        // Magic attacks (long range)
+        else {
+            projectiles.push({
+                x: player.facingRight ? player.x + player.width : player.x,
+                y: player.y + 20,
+                velocityX: player.facingRight ? 10 : -10,
+                damage: weapon.damage,
+                color: weapon.color || '#4488ff',
+                type: 'magic'
+            });
+        }
+        
+        weapon.cooldown = weapon.cooldown || 0;
+    }
+    
+    // Special move
+    function activateSpecialMove() {
+        if (player.specialCharge < 10) return;
+        
+        player.specialCharge = 0;
+        player.specialActive = true;
+        player.specialTimer = 120; // 2 seconds at 60fps
+        specialNotification.classList.add('hidden');
+        
+        const hero = heroes[player.currentHero];
+        
+        // Create special effect based on hero
+        createSpecialEffect(hero.specialEffect, player.x, player.y);
+        
+        // Special move effects based on hero
+        switch(player.currentHero) {
+            case 'veronica': // Galaxy Slash
+                // Slash across the screen
+                for (let i = 0; i < 5; i++) {
+                    setTimeout(() => {
+                        createParticles(player.x + i * 100, player.y, '#4444ff', 20);
+                    }, i * 50);
+                }
+                
+                // Damage all enemies
+                for (let i = enemies.length - 1; i >= 0; i--) {
+                    const enemy = enemies[i];
+                    enemy.health -= 50;
+                    createParticles(enemy.x + enemy.width/2, enemy.y + enemy.height/2, '#4444ff', 15);
+                    
+                    if (enemy.health <= 0) {
+                        enemies.splice(i, 1);
+                        player.score += enemy.type === "boss" ? 300 : 100;
+                        player.zombiesKilled++;
+                        player.specialCharge = Math.min(player.specialCharge + 1, 10);
+                    }
+                }
+                break;
+                
+            case 'kane': // King's Hand
+                // Create a powerful shockwave
+                createParticles(player.x, player.y, '#ff4444', 50);
+                
+                // Knock back and damage enemies
+                for (let i = enemies.length - 1; i >= 0; i--) {
+                    const enemy = enemies[i];
+                    const distance = Math.abs(enemy.x - player.x);
+                    if (distance < 200) {
+                        enemy.health -= 40;
+                        enemy.velocityX += (enemy.x > player.x ? 10 : -10);
+                        createParticles(enemy.x + enemy.width/2, enemy.y + enemy.height/2, '#ff4444', 10);
+                        
+                        if (enemy.health <= 0) {
+                            enemies.splice(i, 1);
+                            player.score += enemy.type === "boss" ? 300 : 100;
+                            player.zombiesKilled++;
+                            player.specialCharge = Math.min(player.specialCharge + 1, 10);
+                        }
+                    }
+                }
+                break;
+                
+            case 'lyra': // Shadow Veil
+                // Create shadow clones
+                for (let i = 0; i < 3; i++) {
+                    createParticles(player.x + (i - 1) * 50, player.y, '#8844ff', 30);
+                }
+                
+                // Heal player
+                player.health = Math.min(player.health + 30, 100);
+                createParticles(player.x + player.width/2, player.y + player.height/2, '#88ff88', 20);
+                break;
+                
+            case 'rex': // Thunder Storm
+                // Create lightning strikes
+                for (let i = 0; i < 5; i++) {
+                    const strikeX = Math.random() * canvas.width;
+                    createParticles(strikeX, 0, '#ffff44', 30);
+                    
+                    // Damage enemies under lightning
+                    for (let j = enemies.length - 1; j >= 0; j--) {
+                        const enemy = enemies[j];
+                        if (Math.abs(enemy.x - strikeX) < 30) {
+                            enemy.health -= 30;
+                            createParticles(enemy.x + enemy.width/2, enemy.y + enemy.height/2, '#ffff44', 10);
+                            
+                            if (enemy.health <= 0) {
+                                enemies.splice(j, 1);
+                                player.score += enemy.type === "boss" ? 300 : 100;
+                                player.zombiesKilled++;
+                                player.specialCharge = Math.min(player.specialCharge + 1, 10);
+                            }
+                        }
+                    }
+                }
+                break;
+        }
+    }
+    
+    // Switch hero
+    function switchHero(heroKey) {
+        player.currentHero = heroKey;
+        currentHeroDisplay.textContent = heroes[heroKey].name;
+        specialMoveDisplay.textContent = heroes[heroKey].specialMove;
+        readySpecialMoveDisplay.textContent = heroes[heroKey].specialMove;
+        
+        // Update button states
+        veronicaBtn.classList.remove('active');
+        kaneBtn.classList.remove('active');
+        lyraBtn.classList.remove('active');
+        rexBtn.classList.remove('active');
+        
+        if (heroKey === 'veronica') veronicaBtn.classList.add('active');
+        if (heroKey === 'kane') kaneBtn.classList.add('active');
+        if (heroKey === 'lyra') lyraBtn.classList.add('active');
+        if (heroKey === 'rex') rexBtn.classList.add('active');
+    }
+    
+    // Update game objects
+    function update() {
+        if (!gameRunning) return;
+        
+        // Update cooldowns
+        if (player.attackCooldown > 0) player.attackCooldown--;
+        if (player.specialTimer > 0) {
+            player.specialTimer--;
+            if (player.specialTimer <= 0) {
+                player.specialActive = false;
+            }
+        }
+        
+        // Update weapon cooldowns
+        const hero = heroes[player.currentHero];
+        const meleeWeapon = hero.weapons.melee;
+        const magicWeapon = hero.weapons.magic;
+        
+        if (meleeWeapon.cooldown > 0) meleeWeapon.cooldown--;
+        if (magicWeapon.cooldown > 0) magicWeapon.cooldown--;
+        
+        // Handle player input
+        player.velocityX = 0;
+        
+        // Movement
+        if (keys['ArrowLeft'] || keys['a'] || keys['A']) {
+            player.velocityX = -MOVE_SPEED;
+            player.facingRight = false;
+        }
+        if (keys['ArrowRight'] || keys['d'] || keys['D']) {
+            player.velocityX = MOVE_SPEED;
+            player.facingRight = true;
+        }
+        
+        // Dash
+        if ((keys['Shift']) && player.dashCooldown <= 0 && !player.isDashing) {
+            player.isDashing = true;
+            player.dashCooldown = DASH_COOLDOWN;
+            player.velocityX = player.facingRight ? DASH_SPEED : -DASH_SPEED;
+            
+            // Dash effect
+            createParticles(player.x + player.width/2, player.y + player.height/2, '#ffff00', 20);
+            
+            setTimeout(() => {
+                player.isDashing = false;
+            }, DASH_DURATION);
+        }
+        
+        // Apply gravity
+        player.velocityY += GRAVITY;
+        
+        // Store previous Y position for collision detection
+        const prevY = player.y;
+        
+        // Update player position
+        player.x += player.velocityX;
+        player.y += player.velocityY;
+        
+        // Boundary checks
+        if (player.x < 0) player.x = 0;
+        if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+        
+        // Platform collision (improved)
+        player.onGround = false;
+        for (let platform of platforms) {
+            // Check if player is colliding with platform
+            if (player.x < platform.x + platform.width &&
+                player.x + player.width > platform.x) {
+                
+                // Landing on top of platform
+                if (prevY + player.height <= platform.y && 
+                    player.y + player.height >= platform.y) {
+                    player.y = platform.y - player.height;
+                    player.velocityY = 0;
+                    player.onGround = true;
+                }
+                // Hitting platform from below
+                else if (prevY >= platform.y + platform.height && 
+                         player.y <= platform.y + platform.height) {
+                    player.y = platform.y + platform.height;
+                    player.velocityY = 0;
+                }
+            }
+        }
+        
+        // Ground collision (canvas bottom)
+        if (player.y > canvas.height - player.height) {
+            player.y = canvas.height - player.height;
+            player.velocityY = 0;
+            player.onGround = true;
+        }
+        
+        // Update dash cooldown
+        if (player.dashCooldown > 0) {
+            player.dashCooldown--;
+        }
+        
+        // Spawn enemies
+        if (Math.random() < 0.02) {
+            createEnemy();
+        }
+        
+        // Update enemies
+        for (let i = enemies.length - 1; i >= 0; i--) {
+            const enemy = enemies[i];
+            
+            // Move enemy towards player
+            if (enemy.x < player.x) {
+                enemy.velocityX = Math.min(enemy.velocityX + 0.1, enemy.speed);
+            } else {
+                enemy.velocityX = Math.max(enemy.velocityX - 0.1, -enemy.speed);
+            }
+            
+            enemy.x += enemy.velocityX;
+            
+            // Enemy platform collision
+            let onPlatform = false;
+            for (let platform of platforms) {
+                if (enemy.x < platform.x + platform.width &&
+                    enemy.x + enemy.width > platform.x &&
+                    enemy.y + enemy.height <= platform.y &&
+                    enemy.y + enemy.height + 2 >= platform.y) {
+                    
+                    enemy.y = platform.y - enemy.height;
+                    onPlatform = true;
+                }
+            }
+            
+            // Apply gravity to enemies
+            if (!onPlatform) {
+                enemy.y += 5;
+            }
+            
+            // Boundary checks for enemies
+            if (enemy.y > canvas.height - enemy.height) {
+                enemy.y = canvas.height - enemy.height;
+            }
+            
+            // Enemy attack player
+            if (enemy.attackCooldown <= 0) {
+                if (Math.abs(enemy.x - player.x) < 40 && Math.abs(enemy.y - player.y) < 40) {
+                    player.health -= enemy.type === "boss" ? 15 : 5; // Boss does more damage
+                    enemy.attackCooldown = 60;
+                    createParticles(player.x + player.width/2, player.y + player.height/2, '#ff0000', 5);
+                    updateUI();
+                    
+                    if (player.health <= 0) {
+                        gameOver();
+                    }
+                }
+            } else {
+                enemy.attackCooldown--;
+            }
+        }
+        
+        // Update projectiles
+        for (let i = projectiles.length - 1; i >= 0; i--) {
+            const projectile = projectiles[i];
+            projectile.x += projectile.velocityX;
+            
+            // Remove projectiles that go off screen
+            if (projectile.x < -20 || projectile.x > canvas.width + 20) {
+                projectiles.splice(i, 1);
+                continue;
+            }
+            
+            // Check for hits with enemies
+            for (let j = enemies.length - 1; j >= 0; j--) {
+                const enemy = enemies[j];
+                if (projectile.x < enemy.x + enemy.width &&
+                    projectile.x + 10 > enemy.x &&
+                    projectile.y < enemy.y + enemy.height &&
+                    projectile.y + 10 > enemy.y) {
+                    
+                    enemy.health -= projectile.damage;
+                    createParticles(enemy.x + enemy.width/2, enemy.y + enemy.height/2, projectile.color, 15);
+                    projectiles.splice(i, 1);
+                    
+                    if (enemy.health <= 0) {
+                        enemies.splice(j, 1);
+                        player.score += enemy.type === "boss" ? 300 : 100; // Boss gives more points
+                        player.zombiesKilled++;
+                        player.specialCharge = Math.min(player.specialCharge + 1, 10);
+                        
+                        // Check if special move is ready
+                        if (player.specialCharge >= 10) {
+                            readySpecialMoveDisplay.textContent = hero.specialMove;
+                            specialNotification.classList.remove('hidden');
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        
+        // Update particles
+        for (let i = particles.length - 1; i >= 0; i--) {
+            const particle = particles[i];
+            particle.x += particle.velocityX;
+            particle.y += particle.velocityY;
+            particle.life--;
+            
+            if (particle.life <= 0) {
+                particles.splice(i, 1);
+            }
+        }
+        
+        // Update special effects
+        for (let i = specialEffects.length - 1; i >= 0; i--) {
+            const effect = specialEffects[i];
+            effect.timer--;
+            effect.size = Math.min(effect.size + 2, 50);
+            
+            if (effect.timer <= 0) {
+                specialEffects.splice(i, 1);
+            }
+        }
+        
+        // Update medikits
+        for (let i = medikits.length - 1; i >= 0; i--) {
+            const medikit = medikits[i];
+            
+            // Check if player collects medikit
+            if (player.x < medikit.x + medikit.width &&
+                player.x + player.width > medikit.x &&
+                player.y < medikit.y + medikit.height &&
+                player.y + player.height > medikit.y) {
+                
+                // Heal player
+                player.health = Math.min(player.health + medikit.healAmount, 100);
+                createParticles(medikit.x + medikit.width/2, medikit.y + medikit.height/2, '#00ff00', 15);
+                
+                // Remove medikit and set respawn timer
+                medikits.splice(i, 1);
+                medikitRespawnTimers.push({
+                    x: medikit.x,
+                    y: medikit.y,
+                    timer: 300 // 5 seconds at 60 FPS
+                });
+                updateUI();
+            }
+        }
+        
+        // Update medikit respawn timers
+        for (let i = medikitRespawnTimers.length - 1; i >= 0; i--) {
+            medikitRespawnTimers[i].timer--;
+            if (medikitRespawnTimers[i].timer <= 0) {
+                createMedikit(medikitRespawnTimers[i].x, medikitRespawnTimers[i].y);
+                medikitRespawnTimers.splice(i, 1);
+            }
+        }
+        
+        updateUI();
+    }
+    
+    // Draw game
+    function draw() {
+        // Clear canvas with character-specific background
+        const hero = heroes[player.currentHero];
+        const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        gradient.addColorStop(0, hero.background.top); // Character-specific top color
+        gradient.addColorStop(1, hero.background.bottom); // Character-specific bottom color
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw distant buildings for atmosphere (character-specific)
+        ctx.fillStyle = hero.background.top.replace('8b', '33').replace('4b', '22').replace('2c', '11').replace('1a', '0a')
+                    .replace('004d', '001a').replace('002e', '000f').replace('4d33', '1a11').replace('2e1f', '0f0a');
+        for (let i = 0; i < 5; i++) {
+            const x = i * 150;
+            const height = 100 + Math.sin(i) * 30;
+            ctx.fillRect(x, canvas.height - height - 80, 80, height);
+            
+            // Windows (character-specific color)
+            ctx.fillStyle = hero.color;
+            for (let j = 0; j < 3; j++) {
+                for (let k = 0; k < 2; k++) {
+                    if (Math.random() > 0.3) {
+                        ctx.fillRect(x + 10 + j * 25, canvas.height - height - 70 + k * 20, 5, 8);
+                    }
+                }
+            }
+            ctx.fillStyle = hero.background.top.replace('8b', '33').replace('4b', '22').replace('2c', '11').replace('1a', '0a')
+                    .replace('004d', '001a').replace('002e', '000f').replace('4d33', '1a11').replace('2e1f', '0f0a');
+        }
+        
+        // Draw platforms
+        ctx.fillStyle = '#5d2906';
+        for (let platform of platforms) {
+            ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+            
+            // Platform details
+            ctx.fillStyle = '#4d1906';
+            for (let i = 0; i < platform.width; i += 20) {
+                ctx.fillRect(platform.x + i, platform.y, 10, 3);
+            }
+            ctx.fillStyle = '#5d2906';
+        }
+        
+        // Draw special effects
+        for (let effect of specialEffects) {
+            switch(effect.type) {
+                case 'galaxy':
+                    ctx.fillStyle = `rgba(68, 68, 255, ${effect.timer/60})`;
+                    ctx.beginPath();
+                    ctx.arc(effect.x, effect.y, effect.size, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Galaxy particles
+                    for (let i = 0; i < 20; i++) {
+                        const angle = (i / 20) * Math.PI * 2;
+                        const distance = effect.size * 0.7;
+                        const x = effect.x + Math.cos(angle) * distance;
+                        const y = effect.y + Math.sin(angle) * distance;
+                        ctx.fillStyle = '#ffffff';
+                        ctx.beginPath();
+                        ctx.arc(x, y, 3, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                    break;
+                    
+                case 'king':
+                    ctx.fillStyle = `rgba(255, 68, 68, ${effect.timer/60})`;
+                    ctx.beginPath();
+                    ctx.arc(effect.x, effect.y, effect.size, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Shockwave
+                    ctx.strokeStyle = `rgba(255, 68, 68, ${effect.timer/30})`;
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(effect.x, effect.y, effect.size * 1.5, 0, Math.PI * 2);
+                    ctx.stroke();
+                    break;
+                    
+                case 'shadow':
+                    ctx.fillStyle = `rgba(136, 68, 255, ${effect.timer/60})`;
+                    ctx.beginPath();
+                    ctx.arc(effect.x, effect.y, effect.size, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Shadow tendrils
+                    ctx.strokeStyle = `rgba(136, 68, 255, ${effect.timer/40})`;
+                    ctx.lineWidth = 2;
+                    for (let i = 0; i < 8; i++) {
+                        const angle = (i / 8) * Math.PI * 2;
+                        ctx.beginPath();
+                        ctx.moveTo(effect.x, effect.y);
+                        ctx.lineTo(
+                            effect.x + Math.cos(angle) * effect.size * 2,
+                            effect.y + Math.sin(angle) * effect.size * 2
+                        );
+                        ctx.stroke();
+                    }
+                    break;
+                    
+                case 'thunder':
+                    ctx.fillStyle = `rgba(255, 255, 68, ${effect.timer/60})`;
+                    ctx.beginPath();
+                    ctx.arc(effect.x, effect.y, effect.size, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Lightning bolts
+                    ctx.strokeStyle = `rgba(255, 255, 68, ${effect.timer/30})`;
+                    ctx.lineWidth = 4;
+                    for (let i = 0; i < 5; i++) {
+                        ctx.beginPath();
+                        ctx.moveTo(effect.x, effect.y);
+                        ctx.lineTo(
+                            effect.x + (Math.random() - 0.5) * 100,
+                            effect.y + (Math.random() - 0.5) * 100
+                        );
+                        ctx.stroke();
+                    }
+                    break;
+            }
+        }
+        
+        // Draw player with enhanced 3D design based on hero
+        // Body with 3D shading
+        const currentHero = heroes[player.currentHero];
+        
+        // Body base
+        ctx.fillStyle = currentHero.color;
+        ctx.fillRect(player.x, player.y + 10, player.width, player.height - 10);
+        
+        // Body shading for 3D effect
+        ctx.fillStyle = shadeColor(currentHero.color, -20);
+        ctx.fillRect(player.x + player.width - 8, player.y + 10, 8, player.height - 10);
+        ctx.fillRect(player.x, player.y + 10, 8, player.height - 10);
+        
+        // Head with 3D effect
+        ctx.fillStyle = '#333333'; // Helmet base
+        ctx.fillRect(player.x + 5, player.y, player.width - 10, 15);
+        
+        // Head shading
+        ctx.fillStyle = shadeColor('#333333', -20);
+        ctx.fillRect(player.x + player.width - 12, player.y, 5, 15);
+        ctx.fillRect(player.x + 7, player.y, 5, 15);
+        
+        // Face plate with 3D effect
+        ctx.fillStyle = currentHero.color;
+        ctx.fillRect(player.x + 10, player.y + 5, player.width - 20, 8);
+        
+        // Face plate shading
+        ctx.fillStyle = shadeColor(currentHero.color, -30);
+        ctx.fillRect(player.x + player.width - 15, player.y + 5, 3, 8);
+        ctx.fillRect(player.x + 12, player.y + 5, 3, 8);
+        
+        // Eyes with 3D effect
+        ctx.fillStyle = currentHero.color;
+        ctx.fillRect(player.x + 12, player.y + 7, 4, 4);
+        ctx.fillRect(player.x + 24, player.y + 7, 4, 4);
+        
+        // Eye highlights for 3D effect
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(player.x + 13, player.y + 8, 1, 1);
+        ctx.fillRect(player.x + 25, player.y + 8, 1, 1);
+        
+        // Cape with 3D folds
+        ctx.fillStyle = currentHero.background.top;
+        ctx.beginPath();
+        ctx.moveTo(player.x, player.y + 15);
+        ctx.lineTo(player.x - 10, player.y + 30);
+        ctx.lineTo(player.x, player.y + 45);
+        ctx.fill();
+        
+        // Cape shading
+        ctx.fillStyle = shadeColor(currentHero.background.top, -30);
+        ctx.beginPath();
+        ctx.moveTo(player.x - 2, player.y + 17);
+        ctx.lineTo(player.x - 8, player.y + 30);
+        ctx.lineTo(player.x - 2, player.y + 43);
+        ctx.fill();
+        
+        // Weapon with 3D effect
+        if (player.currentWeapon === 'melee') {
+            const weapon = currentHero.weapons.melee;
+            // Blade with 3D effect
+            ctx.fillStyle = '#cccccc'; // Silver blade
+            const weaponX = player.facingRight ? player.x + player.width : player.x - weapon.range/2;
+            ctx.fillRect(weaponX, player.y + 20, weapon.range/2, 4);
+            
+            // Blade shading
+            ctx.fillStyle = '#aaaaaa';
+            ctx.fillRect(weaponX, player.y + 20, weapon.range/2, 1);
+            ctx.fillRect(weaponX + weapon.range/2 - 1, player.y + 20, 1, 4);
+            
+            // Handle with 3D effect
+            ctx.fillStyle = '#8b4513'; // Brown handle
+            ctx.fillRect(weaponX + (player.facingRight ? weapon.range/2 - 5 : -5), player.y + 20, 5, 4);
+            
+            // Handle shading
+            ctx.fillStyle = shadeColor('#8b4513', -20);
+            ctx.fillRect(weaponX + (player.facingRight ? weapon.range/2 - 5 : -5), player.y + 20, 2, 4);
+            ctx.fillRect(weaponX + (player.facingRight ? weapon.range/2 - 2 : -2), player.y + 20, 1, 4);
+            
+            // Guard with 3D effect
+            ctx.fillStyle = currentHero.color;
+            ctx.fillRect(weaponX + (player.facingRight ? weapon.range/2 - 10 : 5), player.y + 15, 4, 14);
+            
+            // Guard shading
+            ctx.fillStyle = shadeColor(currentHero.color, -20);
+            ctx.fillRect(weaponX + (player.facingRight ? weapon.range/2 - 10 : 5), player.y + 15, 1, 14);
+            ctx.fillRect(weaponX + (player.facingRight ? weapon.range/2 - 7 : 8), player.y + 15, 1, 14);
+        } else {
+            const weapon = currentHero.weapons.magic;
+            // Staff with 3D effect
+            ctx.fillStyle = '#8b4513'; // Staff handle
+            const staffX = player.facingRight ? player.x + player.width : player.x - 30;
+            ctx.fillRect(staffX, player.y + 15, 30, 3);
+            
+            // Staff shading
+            ctx.fillStyle = shadeColor('#8b4513', -20);
+            ctx.fillRect(staffX, player.y + 15, 30, 1);
+            ctx.fillRect(staffX + 28, player.y + 15, 2, 3);
+            
+            // Magic crystal with 3D effect
+            ctx.fillStyle = weapon.color;
+            ctx.beginPath();
+            ctx.arc(staffX + (player.facingRight ? 25 : 5), player.y + 16, 6, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Crystal highlight
+            ctx.fillStyle = shadeColor(weapon.color, 50);
+            ctx.beginPath();
+            ctx.arc(staffX + (player.facingRight ? 25 : 5) - 2, player.y + 16 - 2, 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        // Special move effect
+        if (player.specialActive) {
+            ctx.fillStyle = `rgba(255, 255, 0, 0.3)`;
+            const effectWidth = 100;
+            const effectX = player.facingRight ? player.x : player.x - effectWidth + player.width;
+            ctx.fillRect(effectX, player.y, effectWidth, player.height);
+        }
+        
+        // Draw player health bar above the character
+        const healthBarX = player.x - 5;
+        const healthBarY = player.y - 20;
+        const healthBarWidth = player.width + 10;
+        const healthBarHeight = 8;
+        
+        // Background of health bar (red)
+        ctx.fillStyle = '#ff0000';
+        ctx.fillRect(healthBarX, healthBarY, healthBarWidth, healthBarHeight);
+        
+        // Health fill (green to red based on health percentage)
+        const healthPercentage = player.health / 100;
+        ctx.fillStyle = healthPercentage > 0.5 ? '#00ff00' : healthPercentage > 0.25 ? '#ffff00' : '#ff0000';
+        ctx.fillRect(healthBarX, healthBarY, healthBarWidth * healthPercentage, healthBarHeight);
+        
+        // Health bar border
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(healthBarX, healthBarY, healthBarWidth, healthBarHeight);
+        
+        // Draw current health text
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${Math.round(player.health)}`, healthBarX + healthBarWidth/2, healthBarY + healthBarHeight/2 + 3);
+
+        // Draw enemies with enhanced designs based on type
+        for (let enemy of enemies) {
+            const enemyType = enemyTypes[hero.enemies];
+            
+            // Enemy body based on type
+            ctx.fillStyle = enemy.color;
+            ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+            
+            // Enemy head
+            ctx.fillStyle = enemy.color.replace('0033', '0044').replace('3300', '4400')
+                        .replace('0022', '0033').replace('2200', '3300')
+                        .replace('004d', '0066').replace('4d33', '6644')
+                        .replace('6633', '8844').replace('4422', '6633');
+            ctx.fillRect(enemy.x - 2, enemy.y - 10, enemy.width + 4, 15);
+            
+            // Enemy eyes (glowing based on enemy type)
+            if (hero.enemies === "zombies") {
+                ctx.fillStyle = '#ff0000'; // Red for zombies
+            } else if (hero.enemies === "witches") {
+                ctx.fillStyle = '#ff00ff'; // Purple for witches
+            } else if (hero.enemies === "turtles") {
+                ctx.fillStyle = '#00ff00'; // Green for turtles
+            } else if (hero.enemies === "pigs") {
+                ctx.fillStyle = '#ffff00'; // Yellow for pigs
+            }
+            
+            ctx.fillRect(enemy.x + 8, enemy.y - 5, 6, 6); // Left eye
+            ctx.fillRect(enemy.x + enemy.width - 14, enemy.y - 5, 6, 6); // Right eye
+            
+            // Special features based on enemy type
+            if (hero.enemies === "zombies") {
+                // Zombies have popped eyes and missing heads
+                if (enemy.type === "boss") {
+                    // Boss zombie with multiple eyes
+                    ctx.fillRect(enemy.x + 15, enemy.y - 7, 5, 5); // Middle eye
+                    // Missing chunk from head
+                    ctx.fillStyle = '#8b0000';
+                    ctx.beginPath();
+                    ctx.arc(enemy.x + 20, enemy.y - 15, 8, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    // Normal zombie with popped eye
+                    ctx.fillStyle = '#ff0000';
+                    ctx.beginPath();
+                    ctx.arc(enemy.x + 11 + enemy.eyePopOffset, enemy.y - 2, 8, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            } else if (hero.enemies === "witches") {
+                // Witches have pointy hats
+                ctx.fillStyle = '#330033';
+                ctx.beginPath();
+                ctx.moveTo(enemy.x + enemy.width/2 - 10, enemy.y - 10);
+                ctx.lineTo(enemy.x + enemy.width/2, enemy.y - 30);
+                ctx.lineTo(enemy.x + enemy.width/2 + 10, enemy.y - 10);
+                ctx.fill();
+            } else if (hero.enemies === "turtles") {
+                // Turtles have shells
+                ctx.fillStyle = '#004400';
+                ctx.fillRect(enemy.x - 5, enemy.y + 10, enemy.width + 10, 20);
+                // Shell pattern
+                ctx.fillStyle = '#006600';
+                for (let i = 0; i < 3; i++) {
+                    ctx.fillRect(enemy.x + i * 10, enemy.y + 15, 5, 5);
+                }
+            } else if (hero.enemies === "pigs") {
+                // Pigs have snouts
+                ctx.fillStyle = '#884400';
+                ctx.fillRect(enemy.x + enemy.width/2 - 5, enemy.y + 5, 10, 8);
+                // Nose holes
+                ctx.fillStyle = '#000000';
+                ctx.fillRect(enemy.x + enemy.width/2 - 3, enemy.y + 8, 2, 2);
+                ctx.fillRect(enemy.x + enemy.width/2 + 1, enemy.y + 8, 2, 2);
+            }
+            
+            // Mouth
+            ctx.fillStyle = '#8b0000';
+            if (enemy.type === "boss") {
+                // Boss has a bigger mouth
+                ctx.fillRect(enemy.x + 10, enemy.y + 8, enemy.width - 20, 5);
+                // Sharp teeth
+                ctx.fillStyle = '#ffffff';
+                for (let i = 0; i < 4; i++) {
+                    ctx.fillRect(enemy.x + 12 + i * 5, enemy.y + 8, 2, 6);
+                }
+            } else {
+                ctx.fillRect(enemy.x + enemy.width/2 - 6, enemy.y + 8, 12, 3);
+            }
+            
+            // Health bar
+            ctx.fillStyle = '#ff0000';
+            ctx.fillRect(enemy.x, enemy.y - 15, enemy.width, 5);
+            ctx.fillStyle = '#00ff00';
+            ctx.fillRect(enemy.x, enemy.y - 15, (enemy.width * enemy.health) / enemy.maxHealth, 5);
+        }
+        
+        // Draw medikits
+        for (let medikit of medikits) {
+            // Medikit cross symbol
+            ctx.fillStyle = '#ff0000';
+            ctx.fillRect(medikit.x, medikit.y + 8, medikit.width, 4); // Horizontal bar
+            ctx.fillRect(medikit.x + 8, medikit.y, 4, medikit.height); // Vertical bar
+            
+            // Medikit background
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(medikit.x, medikit.y, medikit.width, medikit.height);
+        }
+        
+        // Draw projectiles
+        for (let projectile of projectiles) {
+            ctx.fillStyle = projectile.color;
+            ctx.beginPath();
+            ctx.arc(projectile.x, projectile.y, 5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Add glow effect
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.beginPath();
+            ctx.arc(projectile.x, projectile.y, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        // Draw particles
+        for (let particle of particles) {
+            ctx.fillStyle = particle.color;
+            ctx.globalAlpha = particle.life / 30;
+            ctx.beginPath();
+            ctx.arc(particle.x, particle.y, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+    }
+    
+    // Game loop
+    function gameUpdate() {
+        update();
+        draw();
+        if (gameRunning) {
+            requestAnimationFrame(gameUpdate);
+        }
+    }
+    
+    // Start game
+    function startGame() {
+        initGame();
+        gameRunning = true;
+        startScreen.classList.add('hidden');
+        gameUpdate();
+        
+        // Spawn initial enemies
+        for (let i = 0; i < 3; i++) {
+            setTimeout(createEnemy, i * 1000);
+        }
+    }
+    
+    // Game over
+    function gameOver() {
+        gameRunning = false;
+        finalScoreDisplay.textContent = player.score;
+        gameOverScreen.classList.remove('hidden');
+        specialNotification.classList.add('hidden');
+    }
+    
+    // Set weapon
+    function setWeapon(weapon) {
+        player.currentWeapon = weapon;
+        
+        // Update button states
+        swordBtn.classList.remove('active');
+        fireBtn.classList.remove('active');
+        iceBtn.classList.remove('active');
+        lightningBtn.classList.remove('active');
+        earthBtn.classList.remove('active');
+        
+        if (weapon === 'melee') swordBtn.classList.add('active');
+        if (weapon === 'magic') fireBtn.classList.add('active'); // Using fire button for magic
+    }
+    
+    // Initialize UI
+    updateUI();
+    setWeapon('melee');
+    switchHero('veronica');
+    
+    // Show story mode
+    function showStoryMode() {
+        startScreen.classList.add('hidden');
+        storyModeScreen.classList.remove('hidden');
+    }
+    
+    // Event listeners
+    startBtn.addEventListener('click', startGame);
+    storyModeBtn.addEventListener('click', showStoryMode);
+    startStoryBtn.addEventListener('click', startGame);
+    restartBtn.addEventListener('click', startGame);
+    
+    // Weapon buttons
+    swordBtn.addEventListener('click', () => setWeapon('melee'));
+    fireBtn.addEventListener('click', () => setWeapon('magic'));
+    iceBtn.addEventListener('click', () => setWeapon('magic'));
+    lightningBtn.addEventListener('click', () => setWeapon('magic'));
+    earthBtn.addEventListener('click', () => setWeapon('magic'));
+    
+    // Character buttons
+    veronicaBtn.addEventListener('click', () => switchHero('veronica'));
+    kaneBtn.addEventListener('click', () => switchHero('kane'));
+    lyraBtn.addEventListener('click', () => switchHero('lyra'));
+    rexBtn.addEventListener('click', () => switchHero('rex'));
+    
+    // Keyboard input
+    document.addEventListener('keydown', (e) => {
+        keys[e.key] = true;
+        
+        // Jump
+        if ((e.key === ' ' || e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp') && player.onGround) {
+            player.velocityY = JUMP_FORCE;
+            player.onGround = false;
+            // Prevent spacebar from also triggering attack when used for jump
+            if (e.key === ' ') {
+                e.preventDefault();
+                return;
+            }
+        }
+        
+        // Attack with P key
+        if (e.key === 'p' || e.key === 'P') {
+            playerAttack();
+        }
+        
+        // Special move
+        if (e.key === 'q' || e.key === 'Q') {
+            activateSpecialMove();
+        }
+        
+        // Switch characters
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            const heroKeys = Object.keys(heroes);
+            const currentIndex = heroKeys.indexOf(player.currentHero);
+            const nextIndex = (currentIndex + 1) % heroKeys.length;
+            switchHero(heroKeys[nextIndex]);
+        }
+        
+        // Weapon selection
+        if (e.key === '1') setWeapon('melee');
+        if (e.key === '2' || e.key === '3' || e.key === '4' || e.key === '5') setWeapon('magic');
+    });
+    
+    document.addEventListener('keyup', (e) => {
+        keys[e.key] = false;
+    });
+    
+    // Mouse input for attack
+    canvas.addEventListener('mousedown', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        mouseX = e.clientX - rect.left;
+        mouseY = e.clientY - rect.top;
+        playerAttack();
+    });
+});
+
+// Helper function to shade colors
+function shadeColor(color, percent) {
+    let R = parseInt(color.substring(1, 3), 16);
+    let G = parseInt(color.substring(3, 5), 16);
+    let B = parseInt(color.substring(5, 7), 16);
+    
+    R = Math.min(255, Math.max(0, R + R * percent / 100));
+    G = Math.min(255, Math.max(0, G + G * percent / 100));
+    B = Math.min(255, Math.max(0, B + B * percent / 100));
+    
+    const RR = Math.round(R).toString(16).padStart(2, '0');
+    const GG = Math.round(G).toString(16).padStart(2, '0');
+    const BB = Math.round(B).toString(16).padStart(2, '0');
+    
+    return `#${RR}${GG}${BB}`;
+}
